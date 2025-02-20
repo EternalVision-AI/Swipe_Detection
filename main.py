@@ -27,8 +27,9 @@ rhStr = "RightHand"
 
 
 # Queue to store past positions (length = 30 frames)
-queue_len = 18
-position_queue = deque(maxlen=queue_len)
+queue_len = 8
+right_position_queue = deque(maxlen=queue_len)
+left_position_queue = deque(maxlen=queue_len)
 
 # Minimum thresholds for significant movement
 MIN_HEIGHT = 150  # Minimum movement for Up-Down detection
@@ -37,10 +38,14 @@ MAX_WIDTH_THRESHOLD = 50  # Max width allowed for Up-Down / Down-Up
 MAX_HEIGHT_THRESHOLD = 50  # Max height allowed for Left-Right / Right-Left
 
 # Store last detected action & bounding box
-last_action = None
-last_rect = None
-action_start_time = None
-detected_action = None
+rh_last_action = None
+lh_last_action = None
+rh_last_rect = None
+lh_last_rect = None
+rh_action_start_time = None
+lh_action_start_time = None
+rh_detected_action = None
+lh_detected_action = None
 
 def classify_movement(queue):
     """
@@ -50,12 +55,12 @@ def classify_movement(queue):
       "Down-Up" if moving upward
       "Left-Right" if moving rightward
       "Right-Left" if moving leftward
-      "No Movement" if movement is insignificant
+      "None" if movement is insignificant
     """
-    global last_action, last_rect, action_start_time, position_queue
-    global MIN_HEIGHT, MIN_WIDTH, MAX_WIDTH_THRESHOLD, MAX_HEIGHT_THRESHOLD
+    # global rh_last_action, rh_last_rect, rh_action_start_time, right_position_queue, left_position_queue
+    # global MIN_HEIGHT, MIN_WIDTH, MAX_WIDTH_THRESHOLD, MAX_HEIGHT_THRESHOLD
     if len(queue) < queue_len:
-        return "No Movement"
+        return None
 
     # Extract X and Y positions from the queue
     x_values = [pos[0] for pos in queue]
@@ -72,20 +77,20 @@ def classify_movement(queue):
     width = max_x - min_x
     height = max_y - min_y
     # Check for horizontal movement (Left-Right or Right-Left)
-    if width > MIN_WIDTH and max_y <= MAX_HEIGHT_THRESHOLD and min_y <= MAX_HEIGHT_THRESHOLD:
+    if (width > MIN_WIDTH and min_y >= MIN_HEIGHT_THRESHOLD) or (width > MIN_WIDTH and height >= MAX_HEIGHT_THRESHOLD - MIN_HEIGHT_THRESHOLD):
         if min_x_idx < max_x_idx:
             return "Right-Left"
         else:
             return "Left-Right"
 
     # Check for vertical movement (Up-Down or Down-Up)
-    if height > MIN_HEIGHT and width <= MAX_WIDTH_THRESHOLD:
+    if (height > MIN_HEIGHT and width <= MAX_WIDTH_THRESHOLD):
         if min_y_idx < max_y_idx:
             return "Up-Down"
         else:
             return "Down-Up"
 
-    return "No Movement"
+    return None
 
 
 def preprocess_img(frame):
@@ -123,14 +128,23 @@ def post_process_single(img, output, score_threshold=10):
 
 def plot_keypoints(img, keypoints, h, w, threshold=10):
     global lhStr, rhStr
-    global last_action, last_rect, action_start_time, position_queue
-    global MIN_HEIGHT, MIN_WIDTH, MAX_WIDTH_THRESHOLD, MAX_HEIGHT_THRESHOLD, detected_action
-    MIN_HEIGHT = int(int((int(keypoints[3*12+1]) - int(keypoints[3*6+1]))*3/4)*h/640)
-    MAX_WIDTH_THRESHOLD = int(((int(keypoints[3*5]) - int(keypoints[3*6]))*1/3)*w/640)
+    global rh_last_action, lh_last_action, rh_last_rect, rlh_last_rect, h_action_start_time, lh_action_start_time, right_position_queue, left_position_queue
+    global MIN_HEIGHT, MIN_WIDTH, MAX_WIDTH_THRESHOLD, MAX_HEIGHT_THRESHOLD, MIN_HEIGHT_THRESHOLD, rh_detected_action, lh_detected_action
+    # MIN_HEIGHT = int(int((int(keypoints[3*12+1]) - int(keypoints[3*6+1]))*3/4)*h/640)
+    # MAX_WIDTH_THRESHOLD = int(((int(keypoints[3*5]) - int(keypoints[3*6]))*1/3)*w/640)
+    # # print(MIN_HEIGHT)
+    
+    # MIN_WIDTH = int(int((int(keypoints[3*5]) - int(keypoints[3*6]))*4/4)*w/640)
+    # MAX_HEIGHT_THRESHOLD = int((int(keypoints[3*6+1]) + int((int(keypoints[3*12+1]) - int(keypoints[3*6+1]))*2/3))*h/640)
     # print(MIN_HEIGHT)
     
-    MIN_WIDTH = int(int((int(keypoints[3*5]) - int(keypoints[3*6]))*4/4)*w/640)
-    MAX_HEIGHT_THRESHOLD = int((int(keypoints[3*6+1]) + int((int(keypoints[3*12+1]) - int(keypoints[3*6+1]))*2/3))*h/640)
+    MIN_HEIGHT = int(int((int(keypoints[3*12+1]) - int(keypoints[3*6+1]))*1/2)*h/640)
+    MAX_WIDTH_THRESHOLD = int(((int(keypoints[3*5]) - int(keypoints[3*6]))*1/2)*w/640)
+    # print(MIN_HEIGHT)
+    
+    MIN_WIDTH = int(int((int(keypoints[3*5]) - int(keypoints[3*6]))*2/3)*w/640)
+    MAX_HEIGHT_THRESHOLD = int(int(keypoints[3*12+1])*h/640)
+    MIN_HEIGHT_THRESHOLD = int(int(keypoints[3*6+1])*h/640)
     # print(MIN_HEIGHT)
     
     for i in range(0,len(sk)//2):
@@ -152,19 +166,27 @@ def plot_keypoints(img, keypoints, h, w, threshold=10):
         conf = keypoints[3*i+2]
         pointStr = f"{i}"
         if i == 10:
-            rhStr = "RightHand: ("+str(x)+", "+str(y)+")"
             cv2.circle(img, (x,y), 3, (0,0,0), -1)
-            
             # Store in queue
-            position_queue.append((x, y))
-
+            right_position_queue.append((x, y))
             # Check action classification
-            detected_action = classify_movement(position_queue)
-            
-        # elif i == 10:
-        #     pass
-        else:
-            pointStr = str(i)
+            rh_detected_action = classify_movement(right_position_queue)
+            if rh_detected_action == None:
+                rhStr = f"RightHand: {rh_last_action}"
+            else:
+                rhStr = f"RightHand: {rh_detected_action}"        
+        if i == 9:
+            cv2.circle(img, (x,y), 3, (0,0,0), -1)
+            # Store in queue
+            left_position_queue.append((x, y))
+            # Check action classification
+            lh_detected_action = classify_movement(left_position_queue)
+            if lh_detected_action == None:
+                lhStr = f"LeftHand: {lh_last_action}"
+            else:
+                lhStr = f"LeftHand: {lh_detected_action}"
+        
+        pointStr = str(i)
         if conf > threshold: # Only draw the circle if confidence is above some threshold
             cv2.circle(img, (x,y), 3, (0,0,0), -1)
             cv2.putText(img, pointStr,(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0,0,255), 1)
@@ -195,14 +217,25 @@ def smooth_pred(keypoints):
 if __name__== "__main__":
     # cap = jetson_camera.VideoCapture(out_width=736, out_height=480)
     cap = cv2.VideoCapture(0)  # Use 0 for default webcam, change for external cameras
+    # cap = cv2.VideoCapture('(2).mp4')  # Use 0 for default webcam, change for external cameras
+    # Get video properties
+    frame_width = int(cap.get(3))
+    frame_height = int(cap.get(4))
+    fps = int(cap.get(cv2.CAP_PROP_FPS))  # Get FPS from the input video
+
+    # Define video writer to save output
+    output_filename = "output.mp4"
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for MP4
+    out = cv2.VideoWriter(output_filename, fourcc, fps, (frame_width, frame_height))
+
     count = 0
     nfps = 3
     while True:
         rect, frame = cap.read()
         if not rect:  # If frame is None, restart the video
             print("⚠️ Video ended or frame missing. Restarting...")
-            cap.release()  # Release the video
-            continue  # Skip processing this frame
+            # cap.release()  # Release the video
+            break  # Skip processing this frame
         count += 1
         h, w, _ = frame.shape
         if count%nfps == 0:
@@ -210,28 +243,83 @@ if __name__== "__main__":
             input_img = preprocess_img(frame)
             output = model_inference(input_img)
             # frame = post_process_single(frame, output[0], score_threshold=5)
-            frame = post_process_multi(frame, output[0], h, w, score_threshold=0.5)
+            frame = post_process_multi(frame, output[0], h, w, score_threshold=0.7)
         cv2.putText(frame, lhStr, (int(w/20),int(h/10)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
         cv2.putText(frame, rhStr, (int(w/20),int(h*2/10)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
-        
 
-        if last_action and (time.time() - action_start_time < 1):
-            min_x, min_y, max_x, max_y = last_rect
-            cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), (0, 255, 0), 2)  # Draw bounding box
-            cv2.putText(frame, f"Action: {last_action}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+        if rh_last_action and (time.time() - rh_action_start_time < 1):
+            min_x, min_y, max_x, max_y = rh_last_rect
+            # cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), (0, 255, 0), 2)  # Draw bounding box
+            if right_position_queue:
+                # Extract X and Y positions from the queue
+                x_values = [pos[0] for pos in right_position_queue]
+                y_values = [pos[1] for pos in right_position_queue]
+
+                # Find the min and max positions
+                min_x, max_x = min(x_values), max(x_values)
+                min_y, max_y = min(y_values), max(y_values)
+
+                # Get index positions of min/max values
+                min_x_idx, max_x_idx = x_values.index(min_x), x_values.index(max_x)
+                min_y_idx, max_y_idx = y_values.index(min_y), y_values.index(max_y)
+                cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), (0, 255, 0), 2)  # Draw bounding box
+                cv2.putText(frame, f"MIN_index({min_x_idx})", (min_x, min_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 5, cv2.LINE_AA)
+                cv2.putText(frame, f"MAX_index({max_x_idx})", (max_x, max_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 5, cv2.LINE_AA)
+            # cv2.putText(frame, f"Action: {rh_last_action}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
         else:
-            last_action = None  # Reset action after 3 seconds
-            
-        if detected_action != "No Movement" and position_queue:
-            last_action = detected_action
-            last_rect = (min([p[0] for p in position_queue]), 
-                        min([p[1] for p in position_queue]), 
-                        max([p[0] for p in position_queue]), 
-                        max([p[1] for p in position_queue]))
-            action_start_time = time.time()
+            rh_last_action = None  # Reset action after 3 seconds
+        
+        if lh_last_action and (time.time() - lh_action_start_time < 1):
+            min_x, min_y, max_x, max_y = lh_last_rect
+            # cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), (0, 0, 255), 2)  # Draw bounding box
+            if left_position_queue:
+                # Extract X and Y positions from the queue
+                x_values = [pos[0] for pos in left_position_queue]
+                y_values = [pos[1] for pos in left_position_queue]
 
+                # Find the min and max positions
+                min_x, max_x = min(x_values), max(x_values)
+                min_y, max_y = min(y_values), max(y_values)
+
+                # Get index positions of min/max values
+                min_x_idx, max_x_idx = x_values.index(min_x), x_values.index(max_x)
+                min_y_idx, max_y_idx = y_values.index(min_y), y_values.index(max_y)
+                cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), (0, 0, 255), 2)  # Draw bounding box
+                cv2.putText(frame, f"MIN_index({min_x_idx})", (min_x, min_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 5, cv2.LINE_AA)
+                cv2.putText(frame, f"MAX_index({max_x_idx})", (max_x, max_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 5, cv2.LINE_AA)
+            # cv2.putText(frame, f"Action: {lh_last_action}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+        else:
+            lh_last_action = None  # Reset action after 3 seconds
+            
+        if rh_detected_action != None and right_position_queue:
+            rh_last_action = rh_detected_action
+            rh_last_rect = (min([p[0] for p in right_position_queue]), 
+                        min([p[1] for p in right_position_queue]), 
+                        max([p[0] for p in right_position_queue]), 
+                        max([p[1] for p in right_position_queue]))
+            rh_action_start_time = time.time()
             # Clear queue after recognition
-            position_queue.clear()
+            right_position_queue.clear()
+            left_position_queue.clear()
+            
+        if lh_detected_action != None and left_position_queue:
+            lh_last_action = lh_detected_action
+            lh_last_rect = (min([p[0] for p in left_position_queue]), 
+                        min([p[1] for p in left_position_queue]), 
+                        max([p[0] for p in left_position_queue]), 
+                        max([p[1] for p in left_position_queue]))
+            lh_action_start_time = time.time()
+            # Clear queue after recognition
+            right_position_queue.clear()
+            left_position_queue.clear()
+            
         # frame = cv2.resize(frame, input_shape)
-        cv2.imshow('out',frame)
+        # Write the original-sized frame to output.mp4
+        # out.write(frame)
+        cv2.imshow('out',cv2.resize(frame, None, fx=0.5, fy=0.5))
+        # cv2.imshow('out',frame)
         cv2.waitKey(1)
+    # Release resources
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
