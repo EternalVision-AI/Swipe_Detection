@@ -12,19 +12,6 @@ import asyncio
 import websockets
 import json
 
-import depthai as dai
-
-def create_pipeline():
-    pipeline = dai.Pipeline()
-    cam_rgb = pipeline.createColorCamera()
-    cam_rgb.setPreviewSize(1920, 1080)
-    cam_rgb.setInterleaved(False)
-    cam_rgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.BGR)
-    xout_rgb = pipeline.createXLinkOut()
-    xout_rgb.setStreamName("rgb")
-    cam_rgb.preview.link(xout_rgb.input)
-    return pipeline
-
 session = ort.InferenceSession('yolov8n-pose.onnx', providers=[('TensorrtExecutionProvider', {'trt_engine_cache_enable': True, 'trt_engine_cache_path': '/home/nvidia/TRT_cache/engine_cache', "trt_fp16_enable": True, 'device_id': 0, }), 'CUDAExecutionProvider']) # providers=['CPUExecutionProvider'])#,
 
 input_name = session.get_inputs()[0].name
@@ -42,9 +29,10 @@ input_shape=(640, 640)
 lhStr = "LeftHand"
 rhStr = "RightHand"
 
-PEACE_TIME = 0.7
+PEACE_TIME = 0.8
+SIMILAR_THRESHOLD=50
 # Queue to store past positions (length = 30 frames)
-QUEUE_LEN = 10
+QUEUE_LEN = 20
 right_position_queue = deque(maxlen=QUEUE_LEN)
 left_position_queue = deque(maxlen=QUEUE_LEN)
 
@@ -75,7 +63,7 @@ def classify_movement(queue):
       "Right-Left" if moving leftward "swiping left!"
       "None" if movement is insignificant "idle
     """
-    if len(queue) < QUEUE_LEN:
+    if len(queue) < (QUEUE_LEN//3)*2:
         return None
 
     # Extract X and Y positions from the queue
@@ -108,26 +96,37 @@ def classify_movement(queue):
 
     return None
 
-def isStopCurrentPostion(queue, point, threshold=40):
-    """ Appends a point to the queue if it is sufficiently distinct from the last point in the queue.
-    
+def is_stop_current_position(queue, point):
+    """ Checks if there are more than three points in the queue similar to the given point within a specified SIMILAR_THRESHOLD.
     Args:
-        queue (list of tuples): The queue to append the point to.
-        point (tuple): The point to be appended.
-        threshold (int): The minimum difference between points to consider them distinct.
+        queue (list of tuples): The queue of points.
+        point (tuple): The point to check.
+        SIMILAR_THRESHOLD (int): The radius within which points are considered similar.
+        
+    Returns:
+        bool: True if there are at least three points similar to the given point, False otherwise.
     """
-    stop_counts = 0
-    last_point = queue[-1]  # Get the last point in the queue
-    # Calculate the difference
-    x_diff = abs(last_point[0] - point[0])
-    y_diff = abs(last_point[1] - point[1])
-    # Append the point only if it differs from the last point by the threshold
-    if x_diff <= threshold or y_diff <= threshold:
-        stop_counts = +1
-    if stop_counts >= 3:
-        return True
-    else:
-        return False
+    similar_count = 0  # Initialize counter for similar points
+
+    # Iterate over each point in the queue
+    for existing_point in queue:
+        # Calculate the difference between the existing points and the new point
+        x_diff = abs(existing_point[0] - point[0])
+        y_diff = abs(existing_point[1] - point[1])
+
+        # Check if the differences are within the specified SIMILAR_THRESHOLD
+        if x_diff <= SIMILAR_THRESHOLD and y_diff <= SIMILAR_THRESHOLD:
+            similar_count += 1  # Increment the counter for similar points
+
+        # If three similar points are found, return True
+        if similar_count >= 3:
+            return True
+
+    # Append the new point to the queue if no early exit happened
+    queue.append(point)
+
+    # If less than three similar points are found, return False
+    return False
 
 
 def preprocess_img(frame):
@@ -201,9 +200,12 @@ def plot_keypoints(img, keypoints, h, w, threshold=10):
             # if (time.time() - rh_detected_time > 1):
             # Store in queue
             # right_position_queue.append((x, y))
-            if isStopCurrentPostion(right_position_queue, (x,y)):
+            if is_stop_current_position(right_position_queue, (x,y)):
+                print("New Position")
                 right_position_queue.clear()
-            right_position_queue.append((x, y))
+            else:
+                right_position_queue.append((x, y))
+                
             # Check action classification
             rh_detected_action = classify_movement(right_position_queue)
             
@@ -222,7 +224,8 @@ def plot_keypoints(img, keypoints, h, w, threshold=10):
             # if (time.time() - lh_detected_time > 1):
             # Store in queue
             # left_position_queue.append((x, y))
-            if isStopCurrentPostion(left_position_queue, (x,y)):
+            if is_stop_current_position(left_position_queue, (x,y)):
+                print("New Position")
                 left_position_queue.clear()
             left_position_queue.append((x, y))
             # Check action classification
@@ -274,111 +277,97 @@ async def send_data_to_server(data):
         await websocket.send(message)
         print(f"Sent to server: {message}")
 
-def list_available_devices():
-    # Get a list of connected devices
-    devices = dai.Device.getAllAvailableDevices()
-    if devices:
-        print("Available OAK Devices:")
-        for idx, device in enumerate(devices):
-            print(f"{idx + 1}. Device MxId: {device.getMxId()} - {device.state.name}")
-    else:
-        print("No OAK devices found. Please check your connection.")
 
 async def process_camera_feed():
     # cap = jetson_camera.VideoCapture(out_width=736, out_height=480)
-    # cap = cv2.VideoCapture(0)  # Use 0 fsor default webcam, change for external cameras
-    # cap = cv2.VideoCapture('(2).mp4')  # Use 0 for default webcam, change for external cameras
-    list_available_devices()
-    pipeline = create_pipeline()
-    attempt = 0
-    max_attempts = 5
+    # cap = cv2.VideoCapture(0)  # Use 0 for default webcam, change for external cameras
+    cap = cv2.VideoCapture('(2).mp4')  # Use 0 for default webcam, change for external cameras
+    # Get video properties
+    frame_width = int(cap.get(3))
+    frame_height = int(cap.get(4))
+    fps = int(cap.get(cv2.CAP_PROP_FPS))  # Get FPS from the input video
+
+    # Define video writer to save output
+    # output_filename = "output.mp4"
+    # fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for MP4
+    # out = cv2.VideoWriter(output_filename, fourcc, fps, (frame_width, frame_height))
 
     count = 0
     nfps = 3
-    while attempt < max_attempts:
-        try:
-            # Attempt to connect to the device and start the pipeline
-            with dai.Device(pipeline) as device:
-                q_rgb = device.getOutputQueue(name="rgb", maxSize=1, blocking=False)
-                print("Capturing image...")
-                while True:
-                    frame_q_rgb = q_rgb.get()
-                    frame = frame_q_rgb.getCvFrame()
-                    # if not frame.all():  # If frame is None, restart the video
-                    #     print("⚠️ Video ended or frame missing. Restarting...")
-                    #     # cap.release()  # Release the video
-                    #     break  # Skip processing this frame
-                    count += 1
-                    h, w, _ = frame.shape
-                    if count%nfps == 0:
-                        # print(count)
-                        input_img = preprocess_img(frame)
-                        output = model_inference(input_img)
-                        # frame = post_process_single(frame, output[0], score_threshold=5)
-                        frame = post_process_multi(frame, output[0], h, w, score_threshold=0.7)
-                        if rh_detected_action:
-                            # Send the processed data to the WebSocket server
-                            await send_data_to_server(rh_detected_action)
-                        if lh_detected_action:
-                            # Send the processed data to the WebSocket server
-                            await send_data_to_server(lh_detected_action)
-                    cv2.putText(frame, lhStr, (int(w/20),int(h/10)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
-                    cv2.putText(frame, rhStr, (int(w/20),int(h*2/10)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
+    while True:
+        rect, frame = cap.read()
+        if not rect:  # If frame is None, restart the video
+            print("⚠️ Video ended or frame missing. Restarting...")
+            # cap.release()  # Release the video
+            break  # Skip processing this frame
+        count += 1
+        h, w, _ = frame.shape
+        if count%nfps == 0:
+            # print(count)
+            input_img = preprocess_img(frame)
+            output = model_inference(input_img)
+            # frame = post_process_single(frame, output[0], score_threshold=5)
+            frame = post_process_multi(frame, output[0], h, w, score_threshold=0.7)
+            if rh_detected_action:
+                # Send the processed data to the WebSocket server
+                await send_data_to_server(rh_detected_action)
+            if lh_detected_action:
+                # Send the processed data to the WebSocket server
+                await send_data_to_server(lh_detected_action)
+        cv2.putText(frame, lhStr, (int(w/20),int(h/10)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
+        cv2.putText(frame, rhStr, (int(w/20),int(h*2/10)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
+            
+        if (time.time() - rh_detected_time < PEACE_TIME):
+            # Clear queue after recognition
+            right_position_queue.clear()
+            left_position_queue.clear()
+        
+        if right_position_queue:
+            # Extract X and Y positions from the queue
+            x_values = [pos[0] for pos in right_position_queue]
+            y_values = [pos[1] for pos in right_position_queue]
 
-                        
-                    if (time.time() - rh_detected_time < PEACE_TIME):
-                        # Clear queue after recognition
-                        right_position_queue.clear()
-                        left_position_queue.clear()
-                    if right_position_queue:
-                        # Extract X and Y positions from the queue
-                        x_values = [pos[0] for pos in right_position_queue]
-                        y_values = [pos[1] for pos in right_position_queue]
+            # Find the min and max positions
+            min_x, max_x = min(x_values), max(x_values)
+            min_y, max_y = min(y_values), max(y_values)
 
-                        # Find the min and max positions
-                        min_x, max_x = min(x_values), max(x_values)
-                        min_y, max_y = min(y_values), max(y_values)
+            # Get index positions of min/max values
+            min_x_idx, max_x_idx = x_values.index(min_x), x_values.index(max_x)
+            min_y_idx, max_y_idx = y_values.index(min_y), y_values.index(max_y)
+            cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), (0, 255, 0), 2)  # Draw bounding box
+            cv2.putText(frame, f"MIN_index({min_x_idx})", (min_x, min_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 5, cv2.LINE_AA)
+            cv2.putText(frame, f"MAX_index({max_x_idx})", (max_x, max_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 5, cv2.LINE_AA)
+                
+        if (time.time() - lh_detected_time < PEACE_TIME):
+            # Clear queue after recognition
+            right_position_queue.clear()
+            left_position_queue.clear()
+            
+        if left_position_queue:
+            # Extract X and Y positions from the queue
+            x_values = [pos[0] for pos in left_position_queue]
+            y_values = [pos[1] for pos in left_position_queue]
 
-                        # Get index positions of min/max values
-                        min_x_idx, max_x_idx = x_values.index(min_x), x_values.index(max_x)
-                        min_y_idx, max_y_idx = y_values.index(min_y), y_values.index(max_y)
-                        cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), (0, 255, 0), 2)  # Draw bounding box
-                        cv2.putText(frame, f"MIN_index({min_x_idx})", (min_x, min_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 5, cv2.LINE_AA)
-                        cv2.putText(frame, f"MAX_index({max_x_idx})", (max_x, max_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 5, cv2.LINE_AA)
-                            
-                    if (time.time() - lh_detected_time < PEACE_TIME):
-                        # Clear queue after recognition
-                        right_position_queue.clear()
-                        left_position_queue.clear()
-                    if left_position_queue:
-                        # Extract X and Y positions from the queue
-                        x_values = [pos[0] for pos in left_position_queue]
-                        y_values = [pos[1] for pos in left_position_queue]
+            # Find the min and max positions
+            min_x, max_x = min(x_values), max(x_values)
+            min_y, max_y = min(y_values), max(y_values)
 
-                        # Find the min and max positions
-                        min_x, max_x = min(x_values), max(x_values)
-                        min_y, max_y = min(y_values), max(y_values)
+            # Get index positions of min/max values
+            min_x_idx, max_x_idx = x_values.index(min_x), x_values.index(max_x)
+            min_y_idx, max_y_idx = y_values.index(min_y), y_values.index(max_y)
+            cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), (0, 0, 255), 2)  # Draw bounding box
+            cv2.putText(frame, f"MIN_index({min_x_idx})", (min_x, min_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 5, cv2.LINE_AA)
+            cv2.putText(frame, f"MAX_index({max_x_idx})", (max_x, max_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 5, cv2.LINE_AA)
 
-                        # Get index positions of min/max values
-                        min_x_idx, max_x_idx = x_values.index(min_x), x_values.index(max_x)
-                        min_y_idx, max_y_idx = y_values.index(min_y), y_values.index(max_y)
-                        cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), (0, 0, 255), 2)  # Draw bounding box
-                        cv2.putText(frame, f"MIN_index({min_x_idx})", (min_x, min_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 5, cv2.LINE_AA)
-                        cv2.putText(frame, f"MAX_index({max_x_idx})", (max_x, max_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 5, cv2.LINE_AA)
-
-                    # cv2.imshow('out',cv2.resize(frame, None, fx=0.5, fy=0.5))
-                    cv2.imshow('out',frame)
-                    cv2.waitKey(1)
-            # Release resources
-            # cap.release()
-            cv2.destroyAllWindows()
-        except RuntimeError as e:
-            print(f"Failed to connect to device: {e}")
-            attempt += 1
-            time.sleep(1)  # Wait a bit before retrying
-
-        if attempt == max_attempts:
-            print("Failed to connect to the OAK device after several attempts.")
+        cv2.imshow('out',cv2.resize(frame, None, fx=0.5, fy=0.5))
+        # cv2.imshow('out',frame)
+        cv2.waitKey(1)
+    # Release resources
+    cap.release()
+    # out.release()
+    cv2.destroyAllWindows()
+    
+    
     
 async def main():
     """Start the camera feed processing and send data."""

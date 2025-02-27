@@ -4,5 +4,5 @@ onnxruntime
 onnxruntime_gpu
 opencv_contrib_python
 opencv_python
-opencv_python_headless
 matplotlib
+websockets==11.0.3
