@@ -1,0 +1,581 @@
+﻿<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Intel RealSense Feature Demo</title>
+    <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="css/site.css" />
+    <style>
+        @font-face {
+            font-family: FrutigerNextPro_Light;
+            font-weight: normal;
+            src: url("FrutigerNextPro-Light.otf") format("opentype");
+        }
+
+        @font-face {
+            font-family: FrutigerNextPro_Bold;
+            font-weight: bold;
+            src: url("FrutigerNextPro-Bold.otf") format("opentype");
+        }
+        body{
+            position: absolute;
+            transform-origin: top left;
+            overflow: hidden;
+        }
+        body>*{
+            overflow: hidden;
+        }
+        .t23-dooh{
+            position: absolute;
+            width: 1080px;
+            height: 1920px;
+
+            top: 0;
+            left: 0;
+            background-color: #64C1BE;
+            transform: scale(1);
+            transform-origin: top left;
+            overflow: hidden;
+        }
+        .t23-dooh .edge_overlay_left{
+            position: absolute;
+            width: 1080px;
+            height: 1920px;
+            opacity: 0;
+            top: 0;
+            left: 0;
+            background: rgb(2,0,36);
+            background: linear-gradient(90deg, rgba(2,0,36,1) 0%, rgba(255,255,255,1) 0%, rgba(0,212,255,0) 17%); 
+            transition: opacity .25s;  
+        }
+        .t23-dooh .edge_overlay_right{
+            position: absolute;
+            width: 1080px;
+            height: 1920px;
+            opacity: 0;
+            top: 0;
+            left: 0;
+            background: rgb(255,255,255);
+            background: linear-gradient(90deg, rgba(255,255,255,0) 83%, rgba(255,255,255,1) 100%);
+            transition: opacity .25s;  
+        }
+        .t23-dooh .logo{
+            position: absolute;
+            top: 50px;
+            right: 100px;
+            width: 250px;
+
+        }
+        .t23-dooh .hl{
+            position: absolute;
+            top: 350px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 800px;
+        }
+        .t23-dooh .cookie{
+            position: absolute;
+            top: 50%;
+
+            transform: translateY(-50%) translateX(0) scale(1.1);
+            width: 1080px;
+            height: 500px;
+            transition: all 1s;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+
+        }
+        .t23-dooh .cookie.one{
+            left: 0;
+        }
+        .t23-dooh .cookie.two{
+            left: 1080px;
+        }
+        .t23-dooh .cookie.three{
+            left: 2160px;
+        }
+        .t23-dooh .cookie.four{
+            left: 3240px;
+        }
+        .t23-dooh .cookie.five{
+            left: 4320px;
+        }
+
+        /*.t23-dooh .cookie.rumble{
+            animation-name: rumble;
+            animation-duration: .5s;
+        }*/
+        .t23-dooh .cookie.a.split{
+            /*transform-origin: top left;*/
+            animation-name: split_left;
+            animation-duration: .2s;
+            animation-fill-mode: forwards;
+        }
+        .t23-dooh .cookie.b.split{
+            /*transform-origin: top right;*/
+            animation-name: split_right;
+            animation-duration: .2s;
+            animation-fill-mode: forwards;
+        }
+        .t23-dooh .cookie.hover{
+            /*animation-name: hover;*/
+            animation-duration: 2s;
+            animation-iteration-count: infinite;
+            transform: translateY(-50%) scale(1.3);
+        }
+
+        .cookie_slider{
+            position: absolute;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+            width: 5400px;
+            transition: all 1s ease-in-out;
+        }
+
+        .t23-dooh .glow{
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%,-50%);
+            width: 100%;
+            height: auto;
+            transition: all .5s;
+        }
+        .t23-dooh .bg{
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            height: 100%;
+            width: auto;
+        }
+        .t23-dooh .hint{
+            position: absolute;
+            top: 75%;
+            left: 50%;
+            width: 100%;
+            transform: translateX(-50%);
+            text-align: center;
+            font-size: 60px;
+            font-family: FrutigerNextPro_Bold;
+            color: white;
+            transition: all .5s;
+        }
+        .t23-dooh .hint.one{
+            opacity: 1;
+        }
+        .t23-dooh .hint.two{
+            opacity: 0;
+        }
+        .t23-dooh .hint.three{
+            opacity: 0;
+        }
+        .t23-dooh .hand{
+            position: absolute;
+            top: 60%;
+            right: 20%;
+        }
+        .t23-dooh .hand.show_slide{
+            animation-name: show_slide;
+            animation-duration: 2s;
+            animation-iteration-count: infinite;
+            animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .t23-dooh .hand.show_select{
+            animation-name: show_select;
+            animation-duration: 2s;
+            animation-iteration-count: infinite;
+            animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        @keyframes split_right {
+            0%{
+                transform: translateY(-50%) /*translateX(0px)*/ scale(1.3) rotateZ(0deg);
+            }
+            100%{
+                transform: translateY(-45%) /*translateX(25px)*/ scale(1.3) rotateZ(-10deg);
+            }
+        }
+        @keyframes split_left {
+            0%{
+                transform: translateY(-50%) /*translateX(0px)*/ scale(1.3) rotateZ(0deg);
+            }
+            100%{
+                transform: translateY(-50%) /*translateX(-25px)*/ scale(1.3) rotateZ(10deg);
+            }
+        }
+
+        @keyframes rumble {
+            0%{
+                transform: translateY(-50%) rotateZ(0deg);
+            }
+            20%{
+                transform: translateY(-50%) rotateZ(10deg);
+            }
+            40%{
+                transform: translateY(-50%) rotateZ(-10deg);
+            }
+            60%{
+                transform: translateY(-50%) rotateZ(10deg);
+            }
+            80%{
+                transform: translateY(-50%) rotateZ(-10deg);
+            }
+            100%{
+                transform: translateY(-50%) rotateZ(0deg);
+            }
+        }
+
+        @keyframes hover {
+            0%{
+                transform: translateY(-50%) scale(1.3);
+            }
+            50%{
+                transform: translateY(-45%) scale(1.3);
+            }
+            100%{
+                transform: translateY(-50%) scale(1.3);
+            }
+        }
+
+        @keyframes show_slide {
+            0%{
+                right: 20%;
+            }
+            /*50%{
+                right: 25%;
+                opacity: 1;
+            }*/
+            100%{
+                right: 30%;
+                opacity: 0;
+            }
+        }
+        @keyframes show_select {
+            0%{
+                top: 60%;
+            }
+            /*50%{
+                right: 25%;
+                opacity: 1;
+            }*/
+            100%{
+                top: 65%;
+                opacity: 0;
+            }
+        }
+        /*@keyframes stop-right {
+            0%{
+
+            }
+        }
+
+        @keyframes stop-left {
+
+        }*/
+
+    </style>
+</head>
+
+<body >
+        <!-- <script src="js/signalr/dist/browser/signalr.js"></script> -->
+    <script src="js/three.js"></script>
+    <!-- <script src="js/GestureTracking.js"></script> -->
+
+    <script>
+        window.addEventListener("resize", proportionalResizeAd.bind(this, 1080, 1920));
+  		proportionalResizeAd.call(this, 1080, 1920);
+            function proportionalResizeAd(width, height) {
+			var w = window;
+			var d = document;
+			var e = d.documentElement;
+			var g = d.getElementsByTagName("body")[0];
+			var x = w.innerWidth || e.clientWidth || g.clientWidth;
+			var y = w.innerHeight || e.clientHeight || g.clientHeight;
+			var scaleFactor = x / width;
+			if (height * scaleFactor > y) {
+				scaleFactor = y / height;
+			}
+			g.style.transform = "scale(" + scaleFactor + ")";
+		}
+    </script>
+
+    <script>
+        this.gesture;
+        this.canRecGesture = true;
+        function GestureToString(gesture) {
+            switch (gesture) {
+                case 0: return "waving!";
+                case 1: return "swiping left!";
+                case 2: return "swiping right!";
+                case 3: return "swiping up!";
+                case 4: return "swiping down!";
+                case 5: return "pushing!";
+                default: return "idle";
+            }
+        };
+
+        this.x_mod = 0;
+        this.y_mod = 0;
+
+        var cookieSelected = false;
+        var selection;
+
+        var firstSlide = true;
+        var firstSelect = true;
+
+        // WebSocket Connection Setup
+        const ws = new WebSocket("ws://127.0.0.1:8765");
+
+        ws.onopen = function () {
+            console.log("Connected to Python WebSocket server");
+        };
+
+        ws.onmessage = function (event) {
+            let data = JSON.parse(event.data);
+            let gestureText = GestureToString(data.gesture);
+            let gesture = data
+            console.log("Received from Python WebSocket:", data);
+
+                this.canRecGesture = false;
+                setTimeout(function(){
+                    this.canRecGesture = true;
+                }.bind(this),250)
+
+                this.gesture = gesture;
+                setTimeout(function(){
+                    this.gesture = 0;
+                }.bind(this),100)
+                console.log("this.gesture: ", this.gesture)
+
+
+                if(this.gesture == "swiping right!"){
+                    moveSlider("left")
+                } else if(this.gesture == "swiping left!"){
+                    moveSlider("right")
+                } else if(this.gesture == "swiping up!"){
+                    unSelectCookie()
+                } else if(this.gesture == "swiping down!"){
+                    if(!cookieSelected){
+                        selectCookie();
+                    } else {
+                        crackCookie();
+                    }
+
+                }
+
+        };
+
+        // Handle WebSocket errors
+        ws.onerror = function (error) {
+            console.error("WebSocket Error:", error);
+        };
+
+        /*setTimeout(() => {
+            this.gesture = 3;
+        }, 1000);*/
+
+
+
+
+        function crackCookie(){
+            var selector = '.cookie.'+selection;
+            var cookie_halves = document.querySelectorAll(selector);
+            cookie_halves[0].className = "cookie " + selection + " a";
+            cookie_halves[1].className = "cookie " + selection + " b";
+            for(var i = 0; i < cookie_halves.length; i++){
+
+                cookie_halves[i].className += " split";
+
+                setTimeout(function(){
+                    cookie_halves[0].style.backgroundImage = "url(cookie_result.png)";
+                    cookie_halves[1].style.opacity = 0;
+                },500)
+                setTimeout(function(){
+                    reset();
+                },5000)
+            }
+
+            
+        }
+
+        function moveSlider(direction){
+            console.log("Moving slide", direction)
+            if(!cookieSelected){
+                var modifier = 1080;
+                var oldLeft = parseInt(window.getComputedStyle(document.querySelector('.cookie_slider')).left)
+                if(direction == "right" && oldLeft != -4320){
+                    console.log("RIGHT: ", oldLeft)
+                    modifier *= -1;
+                    var newLeft = oldLeft + modifier
+                    document.querySelector('.cookie_slider').style.left = newLeft + "px";
+                    if(firstSlide){
+                        firstSlide = false;
+                        document.querySelector('.hand').style.opacity = 0;
+                        toggleHint('select');
+                        setTimeout(function(){
+                            document.querySelector('.hand').className = "hand show_select";
+                        },250)
+                        setTimeout(function(){
+                            document.querySelector('.hand').style.opacity = 1;
+                        },500)
+                    }
+                } else if(direction == "right" && oldLeft == -4320){
+                    document.querySelector('.edge_overlay_right').style.opacity = 1;
+                    setTimeout(function(){
+                        document.querySelector('.edge_overlay_right').style.opacity = 0;
+                    },250)
+                } else if(direction == "left" && oldLeft != 0){
+                    console.log("LEFT: ", oldLeft)
+                    var newLeft = oldLeft + modifier
+                    document.querySelector('.cookie_slider').style.left = newLeft + "px";
+                } else if(direction == "left" && oldLeft == 0){
+                    document.querySelector('.edge_overlay_left').style.opacity = 1;
+                    setTimeout(function(){
+                        document.querySelector('.edge_overlay_left').style.opacity = 0;
+                    },250)
+                }
+            }
+            
+        }
+
+        function selectCookie(){
+            selection = ((parseInt(window.getComputedStyle(document.querySelector('.cookie_slider')).left)/1080)*-1) + 1;
+            cookieSelected = true
+            switch (selection) {
+                case 1: selection = "one"; break;
+                case 2: selection = "two"; break;
+                case 3: selection = "three"; break;
+                case 4: selection = "four"; break;
+                case 5: selection = "five"; break;
+                default:
+                    break;
+            }
+            var selector = '.cookie.'+selection
+            var cookies = document.querySelectorAll(selector);
+            for(var i = 0; i < cookies.length; i++){
+                cookies[i].className += " hover"
+            }
+            //document.querySelectorAll(selector).className += " hover"
+            
+            console.log(selection)
+            if(firstSelect){
+                toggleHint('crack');
+            }
+            if(firstSlide){
+                document.querySelector('.hand').style.opacity = 0;
+                setTimeout(function(){
+                    document.querySelector('.hand').className = "hand show_select";
+                },250)
+                setTimeout(function(){
+                    document.querySelector('.hand').style.opacity = 1;
+                },500)
+            }
+        }
+
+        function unSelectCookie(){
+            selection = ((parseInt(window.getComputedStyle(document.querySelector('.cookie_slider')).left)/1080)*-1) + 1;
+            cookieSelected = false
+            switch (selection) {
+                case 1: selection = "one"; break;
+                case 2: selection = "two"; break;
+                case 3: selection = "three"; break;
+                case 4: selection = "four"; break;
+                case 5: selection = "five"; break;
+                default:
+                    break;
+            }
+            var selector = '.cookie.'+selection
+            var cookies = document.querySelectorAll(selector);
+            for(var i = 0; i < cookies.length; i++){
+                cookies[i].className = "cookie " + selection
+            }
+            //document.querySelector(selector).className = "cookie " + selection
+            
+            console.log(selection)
+        }
+
+        function toggleHint(hint){
+            switch (hint) {
+                case "slide":
+                    document.querySelector('.hint.two').style.opacity = 0;
+                    document.querySelector('.hint.three').style.opacity = 0;
+                    setTimeout(function(){
+                        document.querySelector('.hint.one').style.opacity = 1;
+                    },500)
+                    
+                    break;
+                case "select":
+                    document.querySelector('.hint.one').style.opacity = 0;
+                    document.querySelector('.hint.three').style.opacity = 0;
+                    setTimeout(function(){
+                        document.querySelector('.hint.two').style.opacity = 1;
+                    },500)
+                    break;
+                case "crack":
+                    document.querySelector('.hint.one').style.opacity = 0;
+                    document.querySelector('.hint.two').style.opacity = 0;
+                    setTimeout(function(){
+                        document.querySelector('.hint.three').style.opacity = 1;
+                    },500)
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        function reset(){
+            window.location.reload();
+        }
+        
+    </script>
+
+    <script src="lib/jquery/dist/jquery.min.js"></script>
+    <script src="lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <div class="t23-dooh">
+
+    <img class="bg" src="bg_balls.png">
+    <img class="glow" src="glow.png">
+    <div class="cookie_slider">
+        <div class="cookie one a" style="background-image: url(cookie_1_a.png)"></div>
+        <div class="cookie one b" style="background-image: url(cookie_1_b.png)"></div>
+
+        <div class="cookie two a" style="background-image: url(cookie_2_a.png)"></div>
+        <div class="cookie two b" style="background-image: url(cookie_2_b.png)"></div>
+
+        <div class="cookie three a" style="background-image: url(cookie_3_a.png)"></div>
+        <div class="cookie three b" style="background-image: url(cookie_3_b.png)"></div>
+
+        <div class="cookie four a" style="background-image: url(cookie_4_a.png)"></div>
+        <div class="cookie four b" style="background-image: url(cookie_4_b.png)"></div>
+
+        <div class="cookie five a" style="background-image: url(cookie_5_a.png)"></div>
+        <div class="cookie five b" style="background-image: url(cookie_5_b.png)"></div>
+
+    </div>
+
+    <img class="logo" src="logo.svg">
+    <img class="hl" src="hl.png">
+
+    <img src="hand.png" class="hand show_slide">
+
+    <div class="hint one">
+        Wische nach rechts oder Links um<br>einen Keks auszusuchen!
+    </div>
+    <div class="hint two">
+        Wische nach unten um<br>einen Keks auszuwählen!
+    </div>
+    <div class="hint three">
+        Knack den Keks mit einem<br>Karateschlag und erhalte<br>deine Glücksbotschaft!
+    </div>
+
+    <div class="edge_overlay_left"></div>
+    <div class="edge_overlay_right"></div>
+</div>
+</body>
+
+</html>

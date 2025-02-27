@@ -280,8 +280,8 @@ async def send_data_to_server(data):
 
 async def process_camera_feed():
     # cap = jetson_camera.VideoCapture(out_width=736, out_height=480)
-    # cap = cv2.VideoCapture(0)  # Use 0 for default webcam, change for external cameras
-    cap = cv2.VideoCapture('(2).mp4')  # Use 0 for default webcam, change for external cameras
+    cap = cv2.VideoCapture(0)  # Use 0 for default webcam, change for external cameras
+    # cap = cv2.VideoCapture('(2).mp4')  # Use 0 for default webcam, change for external cameras
     # Get video properties
     frame_width = int(cap.get(3))
     frame_height = int(cap.get(4))
