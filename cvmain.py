@@ -29,18 +29,18 @@ input_shape=(640, 640)
 lhStr = "LeftHand"
 rhStr = "RightHand"
 
-PEACE_TIME = 0.8
-SIMILAR_THRESHOLD=50
-# Queue to store past positions (length = 30 frames)
+PEACE_TIME = 0.7
+SIMILAR_THRESHOLD=37
+# Queue to store past positions
 QUEUE_LEN = 20
 right_position_queue = deque(maxlen=QUEUE_LEN)
 left_position_queue = deque(maxlen=QUEUE_LEN)
 
 # Minimum thresholds for significant movement
-MIN_HEIGHT = 150  # Minimum movement for Up-Down detection
-MIN_WIDTH = 150   # Minimum movement for Left-Right detection
-MAX_WIDTH_THRESHOLD = 50  # Max width allowed for Up-Down / Down-Up
-MAX_HEIGHT_THRESHOLD = 50  # Max height allowed for Left-Right / Right-Left
+MIN_HEIGHT = 0  # Minimum movement for Up-Down detection
+MIN_WIDTH = 0   # Minimum movement for Left-Right detection
+MAX_WIDTH_THRESHOLD = 0  # Max width allowed for Up-Down / Down-Up
+MAX_HEIGHT_THRESHOLD = 0  # Max height allowed for Left-Right / Right-Left
 
 # Store last detected action & bounding box
 rh_last_action = None
@@ -88,7 +88,7 @@ def classify_movement(queue):
             return "swiping right!"
 
     # Check for vertical movement (Up-Down or Down-Up)
-    if (height > MIN_HEIGHT and width <= MAX_WIDTH_THRESHOLD):
+    if (height > MIN_HEIGHT//2 and width <= MAX_WIDTH_THRESHOLD):
         if min_y_idx < max_y_idx:
             return "swiping down!"
         else:
@@ -167,8 +167,8 @@ def plot_keypoints(img, keypoints, h, w, threshold=10):
     global rh_last_action, lh_last_action, rh_detected_time, lh_detected_time, right_position_queue, left_position_queue
     global MIN_HEIGHT, MIN_WIDTH, MAX_WIDTH_THRESHOLD, MAX_HEIGHT_THRESHOLD, MIN_HEIGHT_THRESHOLD, rh_detected_action, lh_detected_action
     
-    MIN_HEIGHT = int(int((int(keypoints[3*12+1]) - int(keypoints[3*6+1]))*1/2)*h/640)
-    MAX_WIDTH_THRESHOLD = int(((int(keypoints[3*5]) - int(keypoints[3*6]))*1/2)*w/640)
+    MIN_HEIGHT = int(int((int(keypoints[3*12+1]) - int(keypoints[3*6+1]))*1/3)*h/640)
+    MAX_WIDTH_THRESHOLD = int(((int(keypoints[3*5]) - int(keypoints[3*6]))*1/3)*w/640)
     # print(MIN_HEIGHT)
     
     MIN_WIDTH = int(int((int(keypoints[3*5]) - int(keypoints[3*6]))*2/3)*w/640)

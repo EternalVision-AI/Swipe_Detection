@@ -358,7 +358,8 @@
                 } else if(this.gesture == "swiping left!"){
                     moveSlider("right")
                 } else if(this.gesture == "swiping up!"){
-                    unSelectCookie()
+                    console.log("Skip swiping up...")
+                    // unSelectCookie()
                 } else if(this.gesture == "swiping down!"){
                     if(!cookieSelected){
                         selectCookie();
